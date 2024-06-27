@@ -1,0 +1,24 @@
+{
+    "canisters": {
+      "router": {
+        "build": "sh build.sh",
+        "candid": "router/candid.did",
+        "wasm": "target/wasm32-unknown-unknown/release/router.wasm",
+        "type": "custom",
+        "metadata": [
+          {
+            "name": "candid:service"
+          }
+        ]
+      }
+    },
+    "defaults": {
+      "build": {
+        "args": "",
+        "packtool": ""
+      }
+    },
+    "output_env_file": ".env",
+    "version": 1
+  }
+  
