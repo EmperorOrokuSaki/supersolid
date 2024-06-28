@@ -46,75 +46,75 @@ pub fn decode_response(
     }
 }
 
-pub fn handle_rpc_response<T, F: SolCall<Return = T>>(
-    rpc_response: RequestResult,
-) -> Result<T, ManagerError> {
-    match rpc_response {
-        RequestResult::Ok(hex_data) => {
-            let decoded_hex = hex::decode(hex_data)
-                .map_err(|err| ManagerError::DecodingError(err.to_string()))?;
-            F::abi_decode_returns(&decoded_hex, false)
-                .map_err(|err| ManagerError::DecodingError(err.to_string()))
-        }
-        RequestResult::Err(e) => Err(ManagerError::RpcResponseError(e)),
-    }
-}
+// pub fn handle_rpc_response<T, F: SolCall<Return = T>>(
+//     rpc_response: RequestResult,
+// ) -> Result<T, ManagerError> {
+//     match rpc_response {
+//         RequestResult::Ok(hex_data) => {
+//             let decoded_hex = hex::decode(hex_data)
+//                 .map_err(|err| ManagerError::DecodingError(err.to_string()))?;
+//             F::abi_decode_returns(&decoded_hex, false)
+//                 .map_err(|err| ManagerError::DecodingError(err.to_string()))
+//         }
+//         RequestResult::Err(e) => Err(ManagerError::RpcResponseError(e)),
+//     }
+// }
 
-pub fn eth_call_args(to: String, data: Vec<u8>) -> String {
-    json!({
-        "id": 1,
-        "jsonrpc": "2.0",
-        "params": [ {
-            "to": to,
-            "data": format!("0x{}", hex::encode(data))
-        }
-        ],
-        "method": "eth_call"
-    })
-    .to_string()
-}
+// pub fn eth_call_args(to: String, data: Vec<u8>) -> String {
+//     json!({
+//         "id": 1,
+//         "jsonrpc": "2.0",
+//         "params": [ {
+//             "to": to,
+//             "data": format!("0x{}", hex::encode(data))
+//         }
+//         ],
+//         "method": "eth_call"
+//     })
+//     .to_string()
+// }
 
-pub async fn send_raw_transaction(
-    to: String,
-    data: String,
-    value: U256,
-    nonce: u64,
-    derivation_path: DerivationPath,
-    rpc_canister: &Service,
-    rpc_url: &str,
-    cycles: u128,
-) -> Result<MultiSendRawTransactionResult, ManagerError> {
-    let rpc = RpcServices::Custom {
-        chainId: 1,
-        services: vec![RpcApi {
-            url: rpc_url.to_string(),
-            headers: None,
-        }],
-    };
+// pub async fn send_raw_transaction(
+//     to: String,
+//     data: String,
+//     value: U256,
+//     nonce: u64,
+//     derivation_path: DerivationPath,
+//     rpc_canister: &Service,
+//     rpc_url: &str,
+//     cycles: u128,
+// ) -> Result<MultiSendRawTransactionResult, ManagerError> {
+//     let rpc = RpcServices::Custom {
+//         chainId: 1,
+//         services: vec![RpcApi {
+//             url: rpc_url.to_string(),
+//             headers: None,
+//         }],
+//     };
 
-    let key_id = EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
-        name: String::from("key_1"),
-    };
+//     let key_id = EcdsaKeyId {
+//         curve: EcdsaCurve::Secp256k1,
+//         name: String::from("key_1"),
+//     };
 
-    let request = SignRequest {
-        chain_id: 1,
-        from: None,
-        to: TxKind::Call(Address::from_str(&to).unwrap()),
-        max_fee_per_gas: todo!(),
-        max_priority_fee_per_gas: todo!(),
-        value,
-        nonce,
-        data: Bytes::from_str(&data).unwrap(),
-    };
+//     let request = SignRequest {
+//         chain_id: 1,
+//         from: None,
+//         to: TxKind::Call(Address::from_str(&to).unwrap()),
+//         max_fee_per_gas: todo!(),
+//         max_priority_fee_per_gas: todo!(),
+//         value,
+//         nonce,
+//         data: Bytes::from_str(&data).unwrap(),
+//     };
 
-    let signed_transaction = sign_eip1559_transaction(request, key_id, derivation_path).await;
+//     let signed_transaction = sign_eip1559_transaction(request, key_id, derivation_path).await;
 
-    match rpc_canister
-        .eth_send_raw_transaction(rpc, None, signed_transaction, cycles)
-        .await
-    {
-        Ok((response,)) => Ok(response),
-        Err(e) => Err(ManagerError::Custom(e.1)),
-    }
-}
+//     match rpc_canister
+//         .eth_send_raw_transaction(rpc, None, signed_transaction, cycles)
+//         .await
+//     {
+//         Ok((response,)) => Ok(response),
+//         Err(e) => Err(ManagerError::Custom(e.1)),
+//     }
+// }

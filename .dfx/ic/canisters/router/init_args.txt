@@ -1,0 +1,1 @@
+(principal, vec record { nat64; record { text; nat64 } })

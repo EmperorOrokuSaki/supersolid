@@ -4,7 +4,6 @@ mod signer;
 mod state;
 mod types;
 mod utils;
-mod sol_api;
 mod timers;
 
 use crate::canister::Supersolid;
