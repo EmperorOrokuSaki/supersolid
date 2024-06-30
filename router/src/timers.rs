@@ -27,9 +27,27 @@ pub async fn check_chains() {
     }
 }
 
-pub async fn check_chain(index: u64, mut state: ChainState) {
+pub async fn check_chain(key: u64, mut state: ChainState) {
+    if state.lock {
+        return;
+    }
+    state.lock = true;
+
+    CHAINS.with(|chains| {
+        let mut binding = chains.borrow_mut();
+        let mutable_state = binding.get_mut(&key).unwrap();
+        mutable_state.lock = true;
+    });
+
     // get current block number
-    //let current_block_number = eth_get_block_number(&state.rpc).await;
+    let current_block_number = eth_get_block_number(&state.rpc).await;
+    
+    if let Some(old_block_number) = state.last_checked_block {
+        // check each block between current_block_number and old_block_number
+    } else {
+        // check from block zero
+    }
+
     print(&format!(
         "[QUERY BEGIN] Chain id {} balance...",
         state.chain_id
@@ -40,7 +58,9 @@ pub async fn check_chain(index: u64, mut state: ChainState) {
         "[QUERY END] Chain id {} balance => {}",
         state.chain_id, balance
     ));
-    CHAINS.with(|chains| *chains.borrow_mut().get_mut(&index).unwrap() = state);
+
+    state.lock = false;
+    CHAINS.with(|chains| chains.borrow_mut().insert(key, state));
 }
 
 pub async fn eth_get_balance(rpc: &str) -> U256 {
@@ -70,28 +90,25 @@ pub async fn eth_get_balance(rpc: &str) -> U256 {
     }
 }
 
-// pub async fn eth_get_block_number(rpc: &str) -> u64 {
-//     let router_key = ROUTER_KEY.with(|key| key.borrow().clone());
-//     let rpc_canister = RPC_CANISTER.with(|canister| canister.borrow().clone());
-//     let rpc_service = RpcService::Custom(RpcApi {
-//         url: rpc.to_string(),
-//         headers: None,
-//     });
-//     let json_data = json!({
-//             "id": 1,
-//             "jsonrpc": "2.0",
-//             "params": [],
-//             "method": "eth_blockNumber"
-//     });
+pub async fn eth_get_block_number(rpc: &str) -> U256 {
+    let rpc_canister = RPC_CANISTER.with(|canister| canister.borrow().clone());
+    let rpc_service = RpcService::Custom(RpcApi {
+        url: rpc.to_string(),
+        headers: None,
+    });
 
-//     match decode_request(
-//         rpc_canister
-//             .request(rpc_service, json_data.to_string(), 500000, 10000000)
-//             .await,
-//     ) {
-//         Ok(decoded_bytes) => {
+    let json_data = json!({
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": "eth_blockNumber"
+    });
 
-//         },
-//         Err()
-//     }
-// }
+    match decode_request(
+        rpc_canister
+            .request(rpc_service, json_data.to_string(), 500000, 20_000_000_000)
+            .await,
+    ) {
+        Ok(decoded_bytes) => U256::from_be_slice(&decoded_bytes),
+        Err(a) => trap(&format!("{:#?}", a)), // todo
+    }
+}
