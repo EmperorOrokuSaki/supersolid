@@ -9,6 +9,7 @@ use ic_exports::ic_cdk::{
         call::CallResult,
         management_canister::ecdsa::{EcdsaCurve, EcdsaKeyId},
     },
+    print,
 };
 use serde_json::json;
 
@@ -17,7 +18,7 @@ use crate::{
         MultiSendRawTransactionResult, RequestResult, RpcApi, RpcService, RpcServices, Service,
     },
     signer::{sign_eip1559_transaction, SignRequest},
-    types::{DerivationPath, RouterError},
+    types::{DerivationPath, EthCallResponse, RouterError},
 };
 
 pub fn rpc_provider(rpc_url: &str) -> RpcService {
@@ -29,11 +30,25 @@ pub fn rpc_provider(rpc_url: &str) -> RpcService {
     })
 }
 
-pub fn decode_request(canister_response: CallResult<(RequestResult,)>) -> Result<Vec<u8>, RouterError> {
+pub fn decode_request(
+    canister_response: CallResult<(RequestResult,)>,
+) -> Result<Vec<u8>, RouterError> {
     let decoded_response = decode_response(canister_response)?;
     match decoded_response {
-        RequestResult::Ok(val) => hex::decode(val).map_err(|error| RouterError::Unknown(error.to_string())),
-        RequestResult::Err(e) => Err(RouterError::Unknown("RPC ERROR".to_string()))
+        RequestResult::Ok(val) => {
+            print(&format!("Received value from RPC: {}", val));
+            let response: EthCallResponse = serde_json::from_str(&val).unwrap();
+            let cleaned_hex = &response.result[2..]; // Remove the "0x" prefix
+
+            let padded_hex = if cleaned_hex.len() % 2 != 0 {
+                format!("0{}", cleaned_hex) // Add a leading zero if necessary
+            } else {
+                String::from(cleaned_hex)
+            };
+
+            hex::decode(padded_hex).map_err(|error| RouterError::Unknown(error.to_string()))
+        }
+        RequestResult::Err(e) => Err(RouterError::Rpc(e)),
     }
 }
 

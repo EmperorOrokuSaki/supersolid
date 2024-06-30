@@ -2,9 +2,12 @@ use alloy_primitives::U256;
 use ic_exports::candid::CandidType;
 use serde::Deserialize;
 
-#[derive(CandidType)]
+use crate::evm_rpc::RpcError;
+
+#[derive(CandidType, Debug)]
 pub enum RouterError {
-    Unknown(String)
+    Unknown(String),
+    Rpc(RpcError)
 }
 
 #[derive(Deserialize)]
