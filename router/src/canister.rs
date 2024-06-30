@@ -49,7 +49,7 @@ impl Supersolid {
 
     #[update]
     pub fn start(&self, rpc_principal: Principal, chains_tuple: Vec<(String, u64)>) {
-        print("START");
+        print("[INIT] Initializing the canister...");
         let mut chains: HashMap<u64, ChainState> = HashMap::new();
 
         for (rpc, chain_id) in chains_tuple {
@@ -65,25 +65,35 @@ impl Supersolid {
 
         CHAINS.with(|rpcs| *rpcs.borrow_mut() = chains);
         RPC_CANISTER.with(|rpc_canister| *rpc_canister.borrow_mut() = Service(rpc_principal));
+        print("[INIT] Initialization is completed.");
+        
         self.start_timers();
     }
 
     fn start_timers(&self) {
-        print("Starting timers");
+        print("[TIMER] Setting up timers...");
         set_timer(Duration::from_secs(1), || {
             spawn(async {
-                print("Setting public key");
+                print("[Timer] Setting public key...");
                 let router_key = ROUTER_KEY.with(|key| key.borrow().clone());
                 let pk: Vec<u8> = get_canister_public_key(router_key, None, None).await;
                 let public_key: String = pubkey_bytes_to_address(&pk);
                 ROUTER_PUBLIC_KEY.with(|pk| *pk.borrow_mut() = public_key);
-                print("Public key set");
+                print("[Timer] Public key is set.");
+
+                print("[Timer] Initializing chain checks...");
                 check_chains().await;
+                print("[Timer] First check is finished.");
             });
         });
 
+        print("[Timer] Initializing chain checks in ten minute intervals...");
         set_timer_interval(Duration::from_secs(600), || {
-            spawn(check_chains());
+            spawn(async {
+                print("[Timer] Starting chain check...");
+                check_chains().await;
+                print("[Timer] Chain check cycle completed.");
+            });
         });
     }
 
@@ -96,7 +106,6 @@ impl Supersolid {
 
     #[query]
     pub fn public_key(&self) -> String {
-        print("Queryy");
         ROUTER_PUBLIC_KEY.with(|pk| pk.borrow().clone())
     }
 
