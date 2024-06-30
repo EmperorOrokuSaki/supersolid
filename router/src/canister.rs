@@ -48,11 +48,11 @@ impl Supersolid {
     // }
 
     #[update]
-    pub fn start(&self, rpc_principal: Principal, chains_tuple: Vec<(u64, (String, u64))>) {
+    pub fn start(&self, rpc_principal: Principal, chains_tuple: Vec<(String, u64)>) {
         print("START");
         let mut chains: HashMap<u64, ChainState> = HashMap::new();
 
-        for (index, (rpc, chain_id)) in chains_tuple {
+        for (rpc, chain_id) in chains_tuple {
             let chain_state = ChainState {
                 chain_id: chain_id,
                 rpc: rpc,
@@ -82,8 +82,7 @@ impl Supersolid {
             });
         });
 
-        print("Starting check_chains timers (60s from now)");
-        set_timer_interval(Duration::from_secs(60), || {
+        set_timer_interval(Duration::from_secs(600), || {
             spawn(check_chains());
         });
     }

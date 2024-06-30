@@ -1,6 +1,0 @@
-service : {
-  balance : (nat64) -> (nat) query;
-  public_key : () -> (text) query;
-  set_pk : () -> ();
-  start : (principal, vec record { nat64; record { text; nat64 } }) -> ();
-}

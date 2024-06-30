@@ -2,9 +2,9 @@ mod canister;
 mod evm_rpc;
 mod signer;
 mod state;
+mod timers;
 mod types;
 mod utils;
-mod timers;
 
 use crate::canister::Supersolid;
 

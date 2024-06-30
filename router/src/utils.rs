@@ -36,7 +36,6 @@ pub fn decode_request(
     let decoded_response = decode_response(canister_response)?;
     match decoded_response {
         RequestResult::Ok(val) => {
-            print(&format!("Received value from RPC: {}", val));
             let response: EthCallResponse = serde_json::from_str(&val).unwrap();
             let cleaned_hex = &response.result[2..]; // Remove the "0x" prefix
 

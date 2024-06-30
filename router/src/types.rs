@@ -7,7 +7,7 @@ use crate::evm_rpc::RpcError;
 #[derive(CandidType, Debug)]
 pub enum RouterError {
     Unknown(String),
-    Rpc(RpcError)
+    Rpc(RpcError),
 }
 
 #[derive(Deserialize)]
@@ -26,5 +26,5 @@ pub struct ChainState {
     pub chain_id: u64,
     pub lock: bool,
     pub last_checked_block: Option<u64>,
-    pub balance: U256
+    pub balance: U256,
 }
