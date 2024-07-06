@@ -58,7 +58,7 @@ pub struct Transfer {
 #[serde(rename_all = "camelCase")]
 pub struct RawContract {
     pub value: Option<String>,
-    pub address: String,
+    pub address: Option<String>,
     pub decimal: Option<String>,
 }
 
@@ -77,4 +77,4 @@ pub struct ChainState {
 }
 
 /// Key: TokenContractAddress, Value: UserBalance
-pub type UserBalances = HashMap<String, U256>;
+pub type UserBalances = HashMap<Option<String>, U256>;

@@ -26,29 +26,9 @@ impl PreUpdate for Supersolid {}
 
 impl Supersolid {
     // INITIALIZATION
-    // #[init]
-    // pub fn init(&mut self, rpc_principal: Principal, chains_tuple: Vec<(u64, (String, u64))>) {
-    //     print("INITIATING");
-    //     let mut chains: HashMap<u64, ChainState> = HashMap::new();
-
-    //     for (index, (rpc, chain_id)) in chains_tuple {
-    //         let chain_state = ChainState {
-    //             chain_id: chain_id,
-    //             rpc: rpc,
-    //             lock: false,
-    //             last_checked_block: None,
-    //             balance: U256::from(0),
-    //         };
-    //         chains.insert(chain_id, chain_state);
-    //     }
-
-    //     CHAINS.with(|rpcs| *rpcs.borrow_mut() = chains);
-    //     RPC_CANISTER.with(|rpc_canister| *rpc_canister.borrow_mut() = Service(rpc_principal));
-    //     self.start_timers();
-    // }
-
-    #[update]
-    pub fn start(&self, rpc_principal: Principal, chains_tuple: Vec<(String, u64)>) {
+    #[init]
+    pub fn init(&self, rpc_principal: Principal, chains_tuple: Vec<(String, u64)>) {
+        ROUTER_PUBLIC_KEY.with(|pk| *pk.borrow_mut() = "C".to_string());
         print("[INIT] Initializing the canister...");
         let mut chains: HashMap<u64, ChainState> = HashMap::new();
 
@@ -70,6 +50,30 @@ impl Supersolid {
 
         self.start_timers();
     }
+
+    // #[update]
+    // pub fn start(&self, rpc_principal: Principal, chains_tuple: Vec<(String, u64)>) {
+    //     print("[INIT] Initializing the canister...");
+    //     let mut chains: HashMap<u64, ChainState> = HashMap::new();
+
+    //     for (rpc, chain_id) in chains_tuple {
+    //         let chain_state = ChainState {
+    //             chain_id: chain_id,
+    //             rpc: rpc,
+    //             lock: false,
+    //             last_checked_block: None,
+    //             balance: U256::from(0),
+    //             ledger: HashMap::new(),
+    //         };
+    //         chains.insert(chain_id, chain_state);
+    //     }
+
+    //     CHAINS.with(|rpcs| *rpcs.borrow_mut() = chains);
+    //     RPC_CANISTER.with(|rpc_canister| *rpc_canister.borrow_mut() = Service(rpc_principal));
+    //     print("[INIT] Initialization is completed.");
+
+    //     self.start_timers();
+    // }
 
     fn start_timers(&self) {
         print("[TIMER] Setting up timers...");
@@ -99,14 +103,14 @@ impl Supersolid {
     }
 
     #[query]
-    pub fn balance(&self, chain_index: u64) -> Nat {
+    pub fn balance(&self, chain_index: u64) -> String {
         let balance_value: U256 =
             CHAINS.with(|chains| chains.borrow().get(&chain_index).unwrap().balance);
-        Nat::from_str(&balance_value.to_string()).unwrap()
+        balance_value.to_string()
     }
 
     #[query]
-    pub fn get_chain_ledger(&self, chain_id: u64) -> Vec<(String, Vec<(String, String)>)> {
+    pub fn get_chain_ledger(&self, chain_id: u64) -> Vec<(String, Vec<(Option<String>, String)>)> {
         CHAINS.with(|chains| {
             let binding = chains.borrow();
             let chain_state: &ChainState = binding.get(&chain_id).unwrap(); // todo: we are assuming chain exists here, double check todo
@@ -127,7 +131,7 @@ impl Supersolid {
     }
 
     #[query]
-    pub fn get_user_balance(&self, chain_id: u64, token_address: String, user: String) -> String {
+    pub fn get_user_balance(&self, chain_id: u64, token_address: Option<String>, user: String) -> String {
         CHAINS.with(|chains| {
             let binding = chains.borrow();
             let chain_state: &ChainState = binding.get(&chain_id).unwrap(); // todo: we are assuming chain exists here, double check todo

@@ -62,6 +62,11 @@ pub enum EthMainnetService {
 }
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum L2MainnetService {
+    Alchemy,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
 pub enum RpcServices {
     EthSepolia(Option<Vec<EthSepoliaService>>),
     Custom { chainId: u64, services: Vec<RpcApi> },
@@ -168,6 +173,7 @@ pub enum RpcService {
     EthSepolia(EthSepoliaService),
     Custom(RpcApi),
     EthMainnet(EthMainnetService),
+    BaseMainnet(L2MainnetService),
     Chain(u64),
     Provider(u64),
 }

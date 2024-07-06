@@ -1,5 +1,8 @@
-service : {
-  balance : (nat64) -> (nat) query;
+service : (principal, vec record { text; nat64 }) -> {
+  balance : (nat64) -> (text) query;
+  get_chain_ledger : (nat64) -> (
+      vec record { text; vec record { opt text; text } },
+    ) query;
+  get_user_balance : (nat64, opt text, text) -> (text) query;
   public_key : () -> (text) query;
-  start : (principal, vec record { text; nat64 }) -> ();
 }
