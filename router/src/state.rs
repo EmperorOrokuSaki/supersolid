@@ -10,7 +10,7 @@ use crate::{evm_rpc::Service, types::ChainState};
 thread_local! {
     // IC canisters
     pub static RPC_CANISTER: RefCell<Service> = RefCell::new(Service(Principal::anonymous()));
-    
+
     // Chains vector
     pub static CHAINS: RefCell<HashMap<u64, ChainState>> = RefCell::new(HashMap::new());
 

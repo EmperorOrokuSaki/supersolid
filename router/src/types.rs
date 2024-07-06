@@ -70,9 +70,11 @@ pub struct ChainState {
     pub chain_id: u64,
     pub lock: bool,
     pub last_checked_block: Option<u64>,
+    /// native token balance of the chain
     pub balance: U256,
     /// Key: UserAddress, Value: Hashmap<TokenAddress, TokenValue>
-    pub ledger: HashMap<String, UserBalances>
+    pub ledger: HashMap<String, UserBalances>,
 }
 
+/// Key: TokenContractAddress, Value: UserBalance
 pub type UserBalances = HashMap<String, U256>;

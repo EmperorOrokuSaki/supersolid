@@ -59,7 +59,7 @@ impl Supersolid {
                 lock: false,
                 last_checked_block: None,
                 balance: U256::from(0),
-                ledger: HashMap::new()
+                ledger: HashMap::new(),
             };
             chains.insert(chain_id, chain_state);
         }
@@ -67,7 +67,7 @@ impl Supersolid {
         CHAINS.with(|rpcs| *rpcs.borrow_mut() = chains);
         RPC_CANISTER.with(|rpc_canister| *rpc_canister.borrow_mut() = Service(rpc_principal));
         print("[INIT] Initialization is completed.");
-        
+
         self.start_timers();
     }
 
@@ -103,6 +103,17 @@ impl Supersolid {
         let balance_value: U256 =
             CHAINS.with(|chains| chains.borrow().get(&chain_index).unwrap().balance);
         Nat::from_str(&balance_value.to_string()).unwrap()
+    }
+
+    #[query]
+    pub fn get_user_balance(&self, chain_id: u64, token_address: String, user: String) -> String {
+        CHAINS.with(|chains| {
+            let binding = chains.borrow();
+            let chain_state: &ChainState = binding.get(&chain_id).unwrap(); // todo: we are assuming chain exists here, double check todo
+            let user_ledger = chain_state.ledger.get(&user).unwrap(); // todo: we are assuming the user has an entry here, double check todo
+            let user_balance = user_ledger.get(&token_address).unwrap(); //todo: we are assuming the user has token balance on this chain id, double check todo
+            user_balance.to_string()
+        })
     }
 
     #[query]
