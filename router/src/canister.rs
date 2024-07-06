@@ -3,7 +3,7 @@ use crate::{
     signer::{get_canister_public_key, pubkey_bytes_to_address},
     state::*,
     timers::check_chains,
-    types::ChainState,
+    types::{ChainState, UserBalances},
 };
 use alloy_primitives::U256;
 use candid::Nat;
@@ -103,6 +103,27 @@ impl Supersolid {
         let balance_value: U256 =
             CHAINS.with(|chains| chains.borrow().get(&chain_index).unwrap().balance);
         Nat::from_str(&balance_value.to_string()).unwrap()
+    }
+
+    #[query]
+    pub fn get_chain_ledger(&self, chain_id: u64) -> Vec<(String, Vec<(String, String)>)> {
+        CHAINS.with(|chains| {
+            let binding = chains.borrow();
+            let chain_state: &ChainState = binding.get(&chain_id).unwrap(); // todo: we are assuming chain exists here, double check todo
+            chain_state
+                .ledger
+                .iter()
+                .map(|(user_addr, balances)| {
+                    (
+                        user_addr.clone(),
+                        balances
+                            .iter()
+                            .map(|(token_addr, balance)| (token_addr.clone(), balance.to_string()))
+                            .collect(),
+                    )
+                })
+                .collect()
+        })
     }
 
     #[query]
