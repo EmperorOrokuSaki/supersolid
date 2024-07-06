@@ -59,6 +59,7 @@ impl Supersolid {
                 lock: false,
                 last_checked_block: None,
                 balance: U256::from(0),
+                ledger: HashMap::new()
             };
             chains.insert(chain_id, chain_state);
         }
