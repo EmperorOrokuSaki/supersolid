@@ -3,11 +3,11 @@ use crate::{
     signer::{get_canister_public_key, pubkey_bytes_to_address},
     state::*,
     timers::check_chains,
-    types::{ChainState, UserBalances},
+    types::{ChainState, RouterError, RouterTxReceipt, UserBalances},
 };
 use alloy_primitives::U256;
 use candid::Nat;
-use ic_canister::{generate_idl, init, query, update, Canister, Idl, PreUpdate};
+use ic_canister::{generate_idl, query, update, Canister, Idl, PreUpdate};
 use ic_exports::{
     candid::Principal,
     ic_cdk::{print, spawn},
@@ -25,10 +25,8 @@ pub struct Supersolid {
 impl PreUpdate for Supersolid {}
 
 impl Supersolid {
-    // INITIALIZATION
-    #[init]
-    pub fn init(&self, rpc_principal: Principal, chains_tuple: Vec<(String, u64)>) {
-        ROUTER_PUBLIC_KEY.with(|pk| *pk.borrow_mut() = "C".to_string());
+    #[update]
+    pub fn start(&self, rpc_principal: Principal, chains_tuple: Vec<(String, u64)>) {
         print("[INIT] Initializing the canister...");
         let mut chains: HashMap<u64, ChainState> = HashMap::new();
 
@@ -50,30 +48,6 @@ impl Supersolid {
 
         self.start_timers();
     }
-
-    // #[update]
-    // pub fn start(&self, rpc_principal: Principal, chains_tuple: Vec<(String, u64)>) {
-    //     print("[INIT] Initializing the canister...");
-    //     let mut chains: HashMap<u64, ChainState> = HashMap::new();
-
-    //     for (rpc, chain_id) in chains_tuple {
-    //         let chain_state = ChainState {
-    //             chain_id: chain_id,
-    //             rpc: rpc,
-    //             lock: false,
-    //             last_checked_block: None,
-    //             balance: U256::from(0),
-    //             ledger: HashMap::new(),
-    //         };
-    //         chains.insert(chain_id, chain_state);
-    //     }
-
-    //     CHAINS.with(|rpcs| *rpcs.borrow_mut() = chains);
-    //     RPC_CANISTER.with(|rpc_canister| *rpc_canister.borrow_mut() = Service(rpc_principal));
-    //     print("[INIT] Initialization is completed.");
-
-    //     self.start_timers();
-    // }
 
     fn start_timers(&self) {
         print("[TIMER] Setting up timers...");
@@ -100,6 +74,17 @@ impl Supersolid {
                 print("[Timer] Chain check cycle completed.");
             });
         });
+    }
+
+    #[update]
+    pub async fn send_request(
+        &mut self,
+        destination_chain_id: u64,
+        destination_address: String,
+        data: String,
+        native_token_value: Nat,
+    ) -> Result<RouterTxReceipt, RouterError> {
+        Err(RouterError::Unknown(String::from("Not implemented yet")))
     }
 
     #[query]
@@ -131,7 +116,12 @@ impl Supersolid {
     }
 
     #[query]
-    pub fn get_user_balance(&self, chain_id: u64, token_address: Option<String>, user: String) -> String {
+    pub fn get_user_balance(
+        &self,
+        chain_id: u64,
+        token_address: Option<String>,
+        user: String,
+    ) -> String {
         CHAINS.with(|chains| {
             let binding = chains.borrow();
             let chain_state: &ChainState = binding.get(&chain_id).unwrap(); // todo: we are assuming chain exists here, double check todo

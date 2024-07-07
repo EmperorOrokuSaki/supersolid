@@ -9,6 +9,7 @@ use crate::evm_rpc::RpcError;
 
 #[derive(CandidType, Debug)]
 pub enum RouterError {
+    Locked,
     Unknown(String),
     Rpc(RpcError),
 }
@@ -74,6 +75,11 @@ pub struct ChainState {
     pub balance: U256,
     /// Key: UserAddress, Value: Hashmap<TokenAddress, TokenValue>
     pub ledger: HashMap<String, UserBalances>,
+}
+
+#[derive(CandidType)]
+pub struct RouterTxReceipt {
+
 }
 
 /// Key: TokenContractAddress, Value: UserBalance

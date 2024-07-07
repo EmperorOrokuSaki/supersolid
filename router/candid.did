@@ -1,8 +1,50 @@
-service : (principal, vec record { text; nat64 }) -> {
+type HttpOutcallError = variant {
+  IcError : record { code : RejectionCode; message : text };
+  InvalidHttpJsonRpcResponse : record {
+    status : nat16;
+    body : text;
+    parsingError : opt text;
+  };
+};
+type JsonRpcError = record { code : int64; message : text };
+type ProviderError = variant {
+  TooFewCycles : record { expected : nat; received : nat };
+  MissingRequiredProvider;
+  ProviderNotFound;
+  NoPermission;
+};
+type RejectionCode = variant {
+  NoError;
+  CanisterError;
+  SysTransient;
+  DestinationInvalid;
+  Unknown;
+  SysFatal;
+  CanisterReject;
+};
+type Result = variant { Ok : record {}; Err : RouterError };
+type RouterError = variant { Rpc : RpcError; Locked; Unknown : text };
+type RpcError = variant {
+  JsonRpcError : JsonRpcError;
+  ProviderError : ProviderError;
+  ValidationError : ValidationError;
+  HttpOutcallError : HttpOutcallError;
+};
+type ValidationError = variant {
+  CredentialPathNotAllowed;
+  HostNotAllowed : text;
+  CredentialHeaderNotAllowed;
+  UrlParseError : text;
+  Custom : text;
+  InvalidHex : text;
+};
+service : {
   balance : (nat64) -> (text) query;
   get_chain_ledger : (nat64) -> (
       vec record { text; vec record { opt text; text } },
     ) query;
   get_user_balance : (nat64, opt text, text) -> (text) query;
   public_key : () -> (text) query;
+  send_request : (nat64, text, text, nat) -> (Result);
+  start : (principal, vec record { text; nat64 }) -> ();
 }
