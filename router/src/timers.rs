@@ -53,7 +53,7 @@ pub async fn check_chain(key: u64, mut state: ChainState) -> Result<(), RouterEr
     });
 
     // get current block number
-    let current_block_number = eth_get_block_number(&state.rpc).await;
+    // let current_block_number = eth_get_block_number(&state.rpc).await;
     let public_key = ROUTER_PUBLIC_KEY.with(|pk| pk.borrow().clone());
 
     let erc20_transfers = if let Some(old_block_number) = state.last_checked_block {
@@ -202,14 +202,18 @@ pub async fn eth_get_transfers(
         transform: None,
     };
 
-    match http_request(request, 20_000_000_000).await {
+    match http_request(request, 25_000_000_000).await {
         Ok((response,)) => {
             let body = response.body;
+            print(String::from_utf8(body.clone()).unwrap());
             let parsed_trasfers: AlchemyGetAssetTransfersResponse =
                 serde_json::from_slice(&body).unwrap();
             Ok(parsed_trasfers.result.transfers)
         }
-        Err((_r, m)) => Err(RouterError::Unknown(m)),
+        Err((_r, m)) => {
+            print(format!("req failed with {}", m));
+            Err(RouterError::Unknown(m))
+        },
     }
 }
 

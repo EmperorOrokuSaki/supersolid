@@ -82,5 +82,11 @@ pub struct RouterTxReceipt {
 
 }
 
+#[derive(CandidType, Clone)]
+pub struct ServiceRequest {
+    pub caller: String, // Caller Address
+    pub data: String, // Hex Data
+}
+
 /// Key: TokenContractAddress, Value: UserBalance
 pub type UserBalances = HashMap<Option<String>, U256>;

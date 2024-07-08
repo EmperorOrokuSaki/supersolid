@@ -5,7 +5,7 @@ use ic_exports::{
     ic_cdk::api::management_canister::ecdsa::{EcdsaCurve::Secp256k1, EcdsaKeyId},
 };
 
-use crate::{evm_rpc::Service, types::ChainState};
+use crate::{evm_rpc::Service, types::{ChainState, ServiceRequest}};
 
 thread_local! {
     // IC canisters
@@ -17,4 +17,7 @@ thread_local! {
     // Router keys
     pub static ROUTER_KEY: RefCell<EcdsaKeyId> = RefCell::new(EcdsaKeyId { curve: Secp256k1, name: "key_1".to_string() });
     pub static ROUTER_PUBLIC_KEY: RefCell<String> = RefCell::new(String::from(""));
+
+    // Reqs
+    pub static SERVICE_REQUESTS: RefCell<HashMap<Principal, Vec<ServiceRequest>>> = RefCell::new(HashMap::new());
 }

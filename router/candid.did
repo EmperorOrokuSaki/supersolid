@@ -30,6 +30,7 @@ type RpcError = variant {
   ValidationError : ValidationError;
   HttpOutcallError : HttpOutcallError;
 };
+type ServiceRequest = record { data : text; caller : text };
 type ValidationError = variant {
   CredentialPathNotAllowed;
   HostNotAllowed : text;
@@ -39,12 +40,15 @@ type ValidationError = variant {
   InvalidHex : text;
 };
 service : {
+  add_request : (text, text) -> ();
   balance : (nat64) -> (text) query;
   get_chain_ledger : (nat64) -> (
       vec record { text; vec record { opt text; text } },
     ) query;
-  get_user_balance : (nat64, opt text, text) -> (text) query;
+  get_user_balance : (nat64, opt text, opt text) -> (text) query;
+  poll : () -> ();
+  poll_requests : (nat64) -> (vec ServiceRequest) query;
   public_key : () -> (text) query;
   send_request : (nat64, text, text, nat) -> (Result);
-  start : (principal, vec record { text; nat64 }) -> ();
+  start : (vec record { text; nat64 }) -> ();
 }
