@@ -16,9 +16,7 @@ use serde_json::json;
 use crate::{
     evm_rpc::{
         MultiSendRawTransactionResult, RequestResult, RpcApi, RpcService, RpcServices, Service,
-    },
-    signer::{sign_eip1559_transaction, SignRequest},
-    types::{DerivationPath, EthCallResponse, RouterError},
+    }, gas::{estimate_transaction_fees, FeeEstimates}, signer::{sign_eip1559_transaction, SignRequest}, types::{DerivationPath, EthCallResponse, RouterError}
 };
 
 pub fn rpc_provider(rpc_url: &str) -> RpcService {
@@ -47,7 +45,7 @@ pub fn decode_request(
 
             hex::decode(padded_hex).map_err(|error| RouterError::Unknown(error.to_string()))
         }
-        RequestResult::Err(e) => Err(RouterError::Rpc(e)),
+        RequestResult::Err(e) => Err(RouterError::RpcResponseError(e)),
     }
 }
 
@@ -59,6 +57,61 @@ pub fn decode_response(
         Err(e) => Err(RouterError::Unknown(e.1)),
     }
 }
+
+pub async fn send_raw_transaction(
+    to: String,
+    data: Vec<u8>,
+    value: U256,
+    nonce: u64,
+    derivation_path: DerivationPath,
+    rpc_canister: &Service,
+    rpc_url: &str,
+    cycles: u128,
+) -> Result<MultiSendRawTransactionResult, RouterError> {
+    let input = Bytes::from(data);
+    let rpc = RpcServices::Custom {
+        chainId: 1,
+        services: vec![RpcApi {
+            url: rpc_url.to_string(),
+            headers: None,
+        }],
+    };
+
+    let FeeEstimates {
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+    } = estimate_transaction_fees(9, rpc.clone(), rpc_canister).await?;
+
+    let key_id = EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: String::from("key_1"),
+    };
+
+    let request = SignRequest {
+        chain_id: 1,
+        from: None,
+        to: TxKind::Call(
+            Address::from_str(&to)
+                .map_err(|err| RouterError::DecodingError(format!("{:#?}", err)))?,
+        ),
+        max_fee_per_gas: max_fee_per_gas.to::<u128>(),
+        max_priority_fee_per_gas: max_priority_fee_per_gas.to::<u128>(),
+        value,
+        nonce,
+        data: input,
+    };
+
+    let signed_transaction = sign_eip1559_transaction(request, key_id, derivation_path).await;
+
+    match rpc_canister
+        .eth_send_raw_transaction(rpc, None, signed_transaction, cycles)
+        .await
+    {
+        Ok((response,)) => Ok(response),
+        Err(e) => Err(RouterError::Unknown(e.1)),
+    }
+}
+
 
 // pub fn handle_rpc_response<T, F: SolCall<Return = T>>(
 //     rpc_response: RequestResult,

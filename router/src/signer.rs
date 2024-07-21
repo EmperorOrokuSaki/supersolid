@@ -25,11 +25,11 @@ pub struct SignRequest {
 pub async fn get_canister_public_key(
     key_id: EcdsaKeyId,
     canister_id: Option<Principal>,
-    derivation_path: Option<DerivationPath>,
+    derivation_path: DerivationPath,
 ) -> Vec<u8> {
     let (key,) = ecdsa_public_key(EcdsaPublicKeyArgument {
         canister_id,
-        derivation_path: derivation_path.unwrap_or([].to_vec()),
+        derivation_path,
         key_id,
     })
     .await
@@ -67,7 +67,7 @@ pub async fn sign_eip1559_transaction(
     .expect("failed to sign the transaction")
     .0
     .signature;
-    let ecdsa_pub_key = get_canister_public_key(key_id, None, Some(derivation_path)).await;
+    let ecdsa_pub_key = get_canister_public_key(key_id, None, derivation_path).await;
     let parity = y_parity(&tx_hash, &r_and_s, &ecdsa_pub_key);
 
     let signature =

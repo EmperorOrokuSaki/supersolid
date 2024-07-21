@@ -5,6 +5,7 @@ mod state;
 mod timers;
 mod types;
 mod utils;
+mod gas;
 
 use crate::canister::Supersolid;
 

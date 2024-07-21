@@ -10,8 +10,10 @@ use crate::evm_rpc::RpcError;
 #[derive(CandidType, Debug)]
 pub enum RouterError {
     Locked,
+    NonExistentValue,
     Unknown(String),
-    Rpc(RpcError),
+    RpcResponseError(RpcError),
+    DecodingError(String)
 }
 
 #[derive(Deserialize)]
@@ -65,6 +67,8 @@ pub struct RawContract {
 
 pub type DerivationPath = Vec<Vec<u8>>;
 
+pub const ROOT_DERIVATION_PATH : DerivationPath = vec![];
+
 #[derive(Clone)]
 pub struct ChainState {
     pub rpc: String,
@@ -73,6 +77,8 @@ pub struct ChainState {
     pub last_checked_block: Option<u64>,
     /// native token balance of the chain
     pub balance: U256,
+    /// Last nonce used
+    pub nonce: u64,
     /// Key: UserAddress, Value: Hashmap<TokenAddress, TokenValue>
     pub ledger: HashMap<String, UserBalances>,
 }

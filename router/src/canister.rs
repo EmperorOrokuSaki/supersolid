@@ -1,9 +1,13 @@
 use crate::{
-    evm_rpc::{RequestResult, RpcApi, RpcService, Service},
+    evm_rpc::{MultiSendRawTransactionResult, RequestResult, RpcApi, RpcService, Service},
     signer::{get_canister_public_key, pubkey_bytes_to_address},
     state::*,
     timers::check_chains,
-    types::{ChainState, RouterError, RouterTxReceipt, ServiceRequest, UserBalances},
+    types::{
+        ChainState, RouterError, RouterTxReceipt, ServiceRequest, UserBalances,
+        ROOT_DERIVATION_PATH,
+    },
+    utils::send_raw_transaction,
 };
 use alloy_primitives::U256;
 use candid::Nat;
@@ -38,6 +42,7 @@ impl Supersolid {
                 last_checked_block: None,
                 balance: U256::from(0),
                 ledger: HashMap::new(),
+                nonce: 0
             };
             chains.insert(chain_id, chain_state);
         }
@@ -58,7 +63,8 @@ impl Supersolid {
             spawn(async {
                 print("[Timer] Setting public key...");
                 let router_key = ROUTER_KEY.with(|key| key.borrow().clone());
-                let pk: Vec<u8> = get_canister_public_key(router_key, None, None).await;
+                let pk: Vec<u8> =
+                    get_canister_public_key(router_key, None, ROOT_DERIVATION_PATH).await;
                 let public_key: String = pubkey_bytes_to_address(&pk);
                 ROUTER_PUBLIC_KEY.with(|pk| *pk.borrow_mut() = public_key);
                 print("[Timer] Public key is set.");
@@ -92,9 +98,30 @@ impl Supersolid {
         destination_chain_id: u64,
         destination_address: String,
         data: String,
-        native_token_value: Nat,
-    ) -> Result<RouterTxReceipt, RouterError> {
-        Err(RouterError::Unknown(String::from("Not implemented yet")))
+        native_token_value: u128,
+    ) -> Result<(), RouterError> {
+        let rpc_canister = RPC_CANISTER.with(|canister| canister.borrow().clone());
+        let chain_state = CHAINS.with(|chains| {
+            chains
+                .borrow_mut()
+                .get(&destination_chain_id)
+                .unwrap()
+                .clone()
+        });
+        
+        send_raw_transaction(
+            destination_address,
+            data.into_bytes(),
+            U256::from(native_token_value),
+            chain_state.nonce,
+            ROOT_DERIVATION_PATH,
+            &rpc_canister,
+            &chain_state.rpc,
+            30_000_000_000,
+        )
+        .await?;
+
+        Ok(())
     }
 
     #[update]
