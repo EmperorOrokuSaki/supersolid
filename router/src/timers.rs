@@ -17,8 +17,7 @@ use crate::{
     evm_rpc::{RpcApi, RpcService},
     state::{CHAINS, ROUTER_KEY, ROUTER_PUBLIC_KEY, RPC_CANISTER},
     types::{
-        AlchemyGetAssetTransfersResponse, ChainState, EthCallResponse, RouterError, Transfer,
-        UserBalances,
+        AlchemyGetAssetTransfersResponse, ChainState, EthCallResponse, LedgerKey, RouterError, Transfer, UserBalances
     },
     utils::{decode_request, decode_response},
 };
@@ -75,7 +74,7 @@ pub async fn check_chain(key: u64, mut state: ChainState) -> Result<(), RouterEr
             // get token value
             // if token doesn't exist create it
             // if token exists add to the balance
-            match mutable_state.ledger.get_mut(&transfer.from) {
+            match mutable_state.ledger.get_mut(&LedgerKey::HexAddress(transfer.from.clone())) {
                 Some(balances) => {
                     let token_balance = balances
                         .get(&transfer.raw_contract.address)
@@ -96,7 +95,7 @@ pub async fn check_chain(key: u64, mut state: ChainState) -> Result<(), RouterEr
                         &mut bytes as &mut [u8],
                     );
                     balances.insert(transfer.raw_contract.address, U256::from_be_bytes(bytes));
-                    mutable_state.ledger.insert(transfer.from, balances);
+                    mutable_state.ledger.insert(LedgerKey::HexAddress(transfer.from), balances);
                 }
             };
         });

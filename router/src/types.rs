@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use alloy_primitives::U256;
+use candid::Principal;
 use ic_exports::candid::CandidType;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::evm_rpc::RpcError;
@@ -10,6 +11,7 @@ use crate::evm_rpc::RpcError;
 #[derive(CandidType, Debug)]
 pub enum RouterError {
     Locked,
+    InsufficientFunds,
     NonExistentValue,
     Unknown(String),
     RpcResponseError(RpcError),
@@ -80,7 +82,13 @@ pub struct ChainState {
     /// Last nonce used
     pub nonce: u64,
     /// Key: UserAddress, Value: Hashmap<TokenAddress, TokenValue>
-    pub ledger: HashMap<String, UserBalances>,
+    pub ledger: HashMap<LedgerKey, UserBalances>,
+}
+
+#[derive(CandidType, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
+pub enum LedgerKey {
+    IcPrincipal(Principal),
+    HexAddress(String)
 }
 
 #[derive(CandidType)]

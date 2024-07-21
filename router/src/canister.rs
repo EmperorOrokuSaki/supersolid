@@ -4,7 +4,7 @@ use crate::{
     state::*,
     timers::check_chains,
     types::{
-        ChainState, RouterError, RouterTxReceipt, ServiceRequest, UserBalances,
+        ChainState, LedgerKey, RouterError, RouterTxReceipt, ServiceRequest, UserBalances,
         ROOT_DERIVATION_PATH,
     },
     utils::send_raw_transaction,
@@ -35,14 +35,33 @@ impl Supersolid {
         let mut chains: HashMap<u64, ChainState> = HashMap::new();
 
         for (rpc, chain_id) in chains_tuple {
+            let ledger = match chain_id {
+                8453 => {
+                    // base
+                    let mut ledger : HashMap<LedgerKey, UserBalances> = HashMap::new();
+                    let mut swap_canister_ledger : UserBalances = HashMap::new();
+                    swap_canister_ledger.insert(None, U256::from(25000000000000000 as u64));
+                    ledger.insert(LedgerKey::IcPrincipal(Principal::from_str("zydig-qiaaa-aaaal-ajn6a-cai").unwrap()), swap_canister_ledger);
+                    ledger
+                },
+                42161 => {
+                    // arbitrum
+                    let mut ledger : HashMap<LedgerKey, UserBalances> = HashMap::new();
+                    let mut swap_canister_ledger : UserBalances = HashMap::new();
+                    swap_canister_ledger.insert(None, U256::from(25000000000000000 as u64));
+                    ledger.insert(LedgerKey::IcPrincipal(Principal::from_str("zydig-qiaaa-aaaal-ajn6a-cai").unwrap()), swap_canister_ledger);
+                    ledger
+                },
+                _ => HashMap::new()
+            };
             let chain_state = ChainState {
                 chain_id: chain_id,
                 rpc: rpc,
                 lock: false,
                 last_checked_block: None,
                 balance: U256::from(0),
-                ledger: HashMap::new(),
-                nonce: 0
+                ledger,
+                nonce: 5,
             };
             chains.insert(chain_id, chain_state);
         }
@@ -85,12 +104,12 @@ impl Supersolid {
         // });
     }
 
-    #[update]
-    pub async fn poll(&self) {
-        print("[Poll] polling...");
-        check_chains().await;
-        print("[Poll] polled.");
-    }
+    // #[update]
+    // pub async fn poll(&self) {
+    //     print("[Poll] polling...");
+    //     check_chains().await;
+    //     print("[Poll] polled.");
+    // }
 
     #[update]
     pub async fn send_request(
@@ -102,13 +121,22 @@ impl Supersolid {
     ) -> Result<(), RouterError> {
         let rpc_canister = RPC_CANISTER.with(|canister| canister.borrow().clone());
         let chain_state = CHAINS.with(|chains| {
-            chains
-                .borrow_mut()
-                .get(&destination_chain_id)
-                .unwrap()
-                .clone()
-        });
-        
+            let mut binding = chains.borrow_mut();
+            let chain = binding.get_mut(&destination_chain_id).unwrap();
+
+            let user_balance = chain
+                .ledger
+                .get_mut(&LedgerKey::IcPrincipal(caller()))
+                .unwrap();
+            let user_native_balance = user_balance.get_mut(&None).unwrap();
+            if user_native_balance <= &mut U256::from(native_token_value) {
+                return Err(RouterError::InsufficientFunds);
+            } else {
+                *user_native_balance -= U256::from(native_token_value);
+                return Ok(chain.clone());
+            }
+        })?;
+
         send_raw_transaction(
             destination_address,
             data.into_bytes(),
@@ -125,17 +153,17 @@ impl Supersolid {
     }
 
     #[update]
-    pub fn add_request(&mut self, caller_identity: String, data: String) {
+    pub fn add_request(&mut self, caller_identity: String, data: String, target_service: Principal) {
         SERVICE_REQUESTS.with(|services| {
             let mut map = services.borrow_mut();
-            if let Some(vector) = map.get_mut(&caller()) {
+            if let Some(vector) = map.get_mut(&target_service) {
                 vector.push(ServiceRequest {
                     caller: caller_identity,
                     data,
                 });
             } else {
                 map.insert(
-                    caller(),
+                    target_service,
                     vec![ServiceRequest {
                         caller: caller_identity,
                         data,
@@ -153,7 +181,7 @@ impl Supersolid {
     }
 
     #[query]
-    pub fn get_chain_ledger(&self, chain_id: u64) -> Vec<(String, Vec<(Option<String>, String)>)> {
+    pub fn get_chain_ledger(&self, chain_id: u64) -> Vec<(LedgerKey, Vec<(Option<String>, String)>)> {
         CHAINS.with(|chains| {
             let binding = chains.borrow();
             let chain_state: &ChainState = binding.get(&chain_id).unwrap(); // todo: we are assuming chain exists here, double check todo
@@ -178,19 +206,19 @@ impl Supersolid {
         &self,
         chain_id: u64,
         token_address: Option<String>,
-        user: Option<String>,
-    ) -> String {
+        user: Option<LedgerKey>,
+    ) -> u64 {
         CHAINS.with(|chains| {
             let binding = chains.borrow();
             let target = match user {
-                Some(t) => t,
-                None => caller().to_string(),
+                None => LedgerKey::IcPrincipal(caller()),
+                _ => user.unwrap()
             };
 
             let chain_state: &ChainState = binding.get(&chain_id).unwrap(); // todo: we are assuming chain exists here, double check todo
             let user_ledger = chain_state.ledger.get(&target).unwrap(); // todo: we are assuming the user has an entry here, double check todo
             let user_balance = user_ledger.get(&token_address).unwrap(); //todo: we are assuming the user has token balance on this chain id, double check todo
-            user_balance.to_string()
+            user_balance.to::<u64>()
         })
     }
 
@@ -213,6 +241,20 @@ impl Supersolid {
                     // If 'from' is out of bounds, return an empty vector
                     Vec::new()
                 }
+            } else {
+                // If no requests found for the caller, return an empty vector
+                Vec::new()
+            }
+        })
+    }
+
+    #[query]
+    pub fn poll_others_requests(&self, who: Principal) -> Vec<ServiceRequest> {
+        SERVICE_REQUESTS.with(|services| {
+            let binding = services.borrow();
+            // Safely get the vector of service requests
+            if let Some(requests) = binding.get(&who) {
+                requests.clone()
             } else {
                 // If no requests found for the caller, return an empty vector
                 Vec::new()
