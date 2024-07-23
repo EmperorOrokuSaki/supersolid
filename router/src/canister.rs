@@ -38,21 +38,31 @@ impl Supersolid {
             let ledger = match chain_id {
                 8453 => {
                     // base
-                    let mut ledger : HashMap<LedgerKey, UserBalances> = HashMap::new();
-                    let mut swap_canister_ledger : UserBalances = HashMap::new();
+                    let mut ledger: HashMap<LedgerKey, UserBalances> = HashMap::new();
+                    let mut swap_canister_ledger: UserBalances = HashMap::new();
                     swap_canister_ledger.insert(None, U256::from(25000000000000000 as u64));
-                    ledger.insert(LedgerKey::IcPrincipal(Principal::from_str("zydig-qiaaa-aaaal-ajn6a-cai").unwrap()), swap_canister_ledger);
+                    ledger.insert(
+                        LedgerKey::IcPrincipal(
+                            Principal::from_str("zydig-qiaaa-aaaal-ajn6a-cai").unwrap(),
+                        ),
+                        swap_canister_ledger,
+                    );
                     ledger
-                },
+                }
                 42161 => {
                     // arbitrum
-                    let mut ledger : HashMap<LedgerKey, UserBalances> = HashMap::new();
-                    let mut swap_canister_ledger : UserBalances = HashMap::new();
+                    let mut ledger: HashMap<LedgerKey, UserBalances> = HashMap::new();
+                    let mut swap_canister_ledger: UserBalances = HashMap::new();
                     swap_canister_ledger.insert(None, U256::from(25000000000000000 as u64));
-                    ledger.insert(LedgerKey::IcPrincipal(Principal::from_str("zydig-qiaaa-aaaal-ajn6a-cai").unwrap()), swap_canister_ledger);
+                    ledger.insert(
+                        LedgerKey::IcPrincipal(
+                            Principal::from_str("zydig-qiaaa-aaaal-ajn6a-cai").unwrap(),
+                        ),
+                        swap_canister_ledger,
+                    );
                     ledger
-                },
-                _ => HashMap::new()
+                }
+                _ => HashMap::new(),
             };
             let chain_state = ChainState {
                 chain_id: chain_id,
@@ -61,7 +71,7 @@ impl Supersolid {
                 last_checked_block: None,
                 balance: U256::from(0),
                 ledger,
-                nonce: 5,
+                nonce: 0,
             };
             chains.insert(chain_id, chain_state);
         }
@@ -119,6 +129,7 @@ impl Supersolid {
         data: String,
         native_token_value: u128,
     ) -> Result<(), RouterError> {
+        print("*/*/*/*/*/ Tx req received.");
         let rpc_canister = RPC_CANISTER.with(|canister| canister.borrow().clone());
         let chain_state = CHAINS.with(|chains| {
             let mut binding = chains.borrow_mut();
@@ -137,10 +148,13 @@ impl Supersolid {
             }
         })?;
 
+        print("*/*/*/*/*/ Starting to submit transaction.");
+
         send_raw_transaction(
+            destination_chain_id,
             destination_address,
             data.into_bytes(),
-            U256::from(native_token_value),
+            native_token_value,
             chain_state.nonce,
             ROOT_DERIVATION_PATH,
             &rpc_canister,
@@ -149,11 +163,22 @@ impl Supersolid {
         )
         .await?;
 
+        CHAINS.with(|chains| {
+            let mut binding = chains.borrow_mut();
+            let chain = binding.get_mut(&destination_chain_id).unwrap();
+            chain.nonce += 1;
+        });
+
         Ok(())
     }
 
     #[update]
-    pub fn add_request(&mut self, caller_identity: String, data: String, target_service: Principal) {
+    pub fn add_request(
+        &mut self,
+        caller_identity: String,
+        data: String,
+        target_service: Principal,
+    ) {
         SERVICE_REQUESTS.with(|services| {
             let mut map = services.borrow_mut();
             if let Some(vector) = map.get_mut(&target_service) {
@@ -181,7 +206,10 @@ impl Supersolid {
     }
 
     #[query]
-    pub fn get_chain_ledger(&self, chain_id: u64) -> Vec<(LedgerKey, Vec<(Option<String>, String)>)> {
+    pub fn get_chain_ledger(
+        &self,
+        chain_id: u64,
+    ) -> Vec<(LedgerKey, Vec<(Option<String>, String)>)> {
         CHAINS.with(|chains| {
             let binding = chains.borrow();
             let chain_state: &ChainState = binding.get(&chain_id).unwrap(); // todo: we are assuming chain exists here, double check todo
@@ -212,7 +240,7 @@ impl Supersolid {
             let binding = chains.borrow();
             let target = match user {
                 None => LedgerKey::IcPrincipal(caller()),
-                _ => user.unwrap()
+                _ => user.unwrap(),
             };
 
             let chain_state: &ChainState = binding.get(&chain_id).unwrap(); // todo: we are assuming chain exists here, double check todo

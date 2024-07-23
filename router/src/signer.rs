@@ -1,31 +1,33 @@
-use alloy::consensus::{SignableTransaction, TxEip1559, TxEnvelope};
-use alloy::eips::eip2718::Encodable2718;
-use alloy::hex;
-use alloy::primitives::{keccak256, Address, Bytes, FixedBytes, Parity, TxKind, U256};
-use alloy::signers::Signature;
+//! This module provides functions for signing EIP-1559 transactions using t-ECDSA, getting the public key of the canister, and converting the public key to an Ethereum address.
 use candid::Principal;
+use ethers_core::abi::ethereum_types::{Address, U256};
+use ethers_core::types::transaction::eip1559::Eip1559TransactionRequest;
+use ethers_core::types::Signature;
+use ethers_core::utils::{hex, keccak256};
 
-use ic_exports::ic_cdk::api::management_canister::ecdsa::{
+use ic_cdk::api::management_canister::ecdsa::{
     ecdsa_public_key, sign_with_ecdsa, EcdsaKeyId, EcdsaPublicKeyArgument, SignWithEcdsaArgument,
 };
+use ic_exports::ic_cdk;
 
-use crate::types::DerivationPath;
+/// A signed transaction.
+type SignedTransaction = String;
 
-pub struct SignRequest {
-    pub chain_id: u64,
-    pub from: Option<String>,
-    pub to: TxKind,
-    pub max_fee_per_gas: u128,
-    pub max_priority_fee_per_gas: u128,
-    pub value: U256,
-    pub nonce: u64,
-    pub data: Bytes,
-}
-
+/// Gets the canister's ECDSA public key.
+///
+/// # Arguments
+///
+/// * `key_id` - The ID of the ECDSA key.
+/// * `derivation_path` - The derivation path of the ECDSA key.
+/// * `canister_id` - The ID of the canister.
+///
+/// # Returns
+///
+/// The public key of the ECDSA key.
 pub async fn get_canister_public_key(
     key_id: EcdsaKeyId,
     canister_id: Option<Principal>,
-    derivation_path: DerivationPath,
+    derivation_path: Vec<Vec<u8>>,
 ) -> Vec<u8> {
     let (key,) = ecdsa_public_key(EcdsaPublicKeyArgument {
         canister_id,
@@ -37,55 +39,66 @@ pub async fn get_canister_public_key(
     key.public_key
 }
 
+/// Signs an EIP-1559 transaction.
+///
+/// # Arguments
+///
+/// * `tx` - The EIP-1559 transaction to sign.
+/// * `key_id` - The ID of the ECDSA key.
+/// * `derivation_path` - The derivation path of the ECDSA key.
+///
+/// # Returns
+///
+/// The signed transaction.
 pub async fn sign_eip1559_transaction(
-    req: SignRequest,
+    tx: Eip1559TransactionRequest,
     key_id: EcdsaKeyId,
-    derivation_path: DerivationPath,
-) -> String {
+    derivation_path: Vec<Vec<u8>>,
+) -> SignedTransaction {
     const EIP1559_TX_ID: u8 = 2;
 
-    let tx = TxEip1559 {
-        to: req.to,
-        value: req.value,
-        input: req.data,
-        nonce: req.nonce,
-        access_list: Default::default(),
-        max_priority_fee_per_gas: req.max_priority_fee_per_gas,
-        max_fee_per_gas: req.max_fee_per_gas,
-        chain_id: req.chain_id,
-        ..Default::default()
-    };
+    let ecdsa_pub_key =
+        get_canister_public_key(key_id.clone(), None, derivation_path.clone()).await;
 
-    let tx_hash = tx.signature_hash();
+    let mut unsigned_tx_bytes = tx.rlp().to_vec();
+    unsigned_tx_bytes.insert(0, EIP1559_TX_ID);
 
-    let r_and_s = sign_with_ecdsa(SignWithEcdsaArgument {
-        message_hash: tx_hash.to_vec(),
-        derivation_path: derivation_path.clone(),
-        key_id: key_id.clone(),
+    let txhash = keccak256(&unsigned_tx_bytes);
+
+    let signature = sign_with_ecdsa(SignWithEcdsaArgument {
+        message_hash: txhash.to_vec(),
+        derivation_path,
+        key_id,
     })
     .await
     .expect("failed to sign the transaction")
     .0
     .signature;
-    let ecdsa_pub_key = get_canister_public_key(key_id, None, derivation_path).await;
-    let parity = y_parity(&tx_hash, &r_and_s, &ecdsa_pub_key);
 
-    let signature =
-        Signature::from_bytes_and_parity(&r_and_s, parity).expect("should be a valid signature");
+    let signature = Signature {
+        v: y_parity(&txhash, &signature, &ecdsa_pub_key),
+        r: U256::from_big_endian(&signature[0..32]),
+        s: U256::from_big_endian(&signature[32..64]),
+    };
 
-    let signed_tx = tx.into_signed(signature);
-
-    let tx_envelope = TxEnvelope::from(signed_tx);
-
-    let signed_tx_bytes = tx_envelope.encoded_2718();
+    let mut signed_tx_bytes = tx.rlp_signed(&signature).to_vec();
+    signed_tx_bytes.insert(0, EIP1559_TX_ID);
 
     format!("0x{}", hex::encode(&signed_tx_bytes))
 }
 
 /// Converts the public key bytes to an Ethereum address with a checksum.
+///
+/// # Arguments
+///
+/// * `pubkey_bytes` - The public key bytes.
+///
+/// # Returns
+///
+/// The Ethereum address with a checksum.
 pub fn pubkey_bytes_to_address(pubkey_bytes: &[u8]) -> String {
-    use alloy::signers::k256::elliptic_curve::sec1::ToEncodedPoint;
-    use alloy::signers::k256::PublicKey;
+    use ethers_core::k256::elliptic_curve::sec1::ToEncodedPoint;
+    use ethers_core::k256::PublicKey;
 
     let key =
         PublicKey::from_sec1_bytes(pubkey_bytes).expect("failed to parse the public key as SEC1");
@@ -96,22 +109,31 @@ pub fn pubkey_bytes_to_address(pubkey_bytes: &[u8]) -> String {
 
     let hash = keccak256(&point_bytes[1..]);
 
-    alloy::primitives::Address::to_checksum(&Address::from_slice(&hash[12..32]), None)
+    ethers_core::utils::to_checksum(&Address::from_slice(&hash[12..32]), None)
 }
 
 /// Computes the parity bit allowing to recover the public key from the signature.
-fn y_parity(prehash: &FixedBytes<32>, sig: &[u8], pubkey: &[u8]) -> Parity {
-    use alloy::signers::k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
+///
+/// # Arguments
+///
+/// * `prehash` - The prehash of the message.
+/// * `sig` - The signature.
+/// * `pubkey` - The public key.
+///
+/// # Returns
+///
+/// The parity bit.
+fn y_parity(prehash: &[u8], sig: &[u8], pubkey: &[u8]) -> u64 {
+    use ethers_core::k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
 
     let orig_key = VerifyingKey::from_sec1_bytes(pubkey).expect("failed to parse the pubkey");
     let signature = Signature::try_from(sig).unwrap();
     for parity in [0u8, 1] {
         let recid = RecoveryId::try_from(parity).unwrap();
-        let recovered_key =
-            VerifyingKey::recover_from_prehash(prehash.as_slice(), &signature, recid)
-                .expect("failed to recover key");
+        let recovered_key = VerifyingKey::recover_from_prehash(prehash, &signature, recid)
+            .expect("failed to recover key");
         if recovered_key == orig_key {
-            return Parity::Eip155(parity as u64);
+            return parity as u64;
         }
     }
 

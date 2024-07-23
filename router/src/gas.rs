@@ -1,31 +1,40 @@
-use alloy_primitives::U256;
+//! This module provides functions for estimating transaction fees and getting the fee history.
 use candid::Nat;
+use ethers_core::types::U256;
+use ic_exports::ic_cdk;
 use serde_bytes::ByteBuf;
-use std::{ops::Add, str::FromStr};
+use std::ops::Add;
 
-use crate::{
-    evm_rpc::{
-        BlockTag, FeeHistory, FeeHistoryArgs, FeeHistoryResult, MultiFeeHistoryResult, RpcServices,
-        Service,
-    },
-    types::RouterError,
-};
+use crate::evm_rpc::*;
+
+pub fn nat_to_u256(n: &Nat) -> U256 {
+    let be_bytes = n.0.to_bytes_be();
+    U256::from_big_endian(&be_bytes)
+}
 
 /// The minimum suggested maximum priority fee per gas.
 const MIN_SUGGEST_MAX_PRIORITY_FEE_PER_GAS: u32 = 1_500_000_000;
 
-pub struct FeeEstimates {
-    pub max_fee_per_gas: U256,
-    pub max_priority_fee_per_gas: U256,
-}
-
+/// Gets the fee history.
+///
+/// # Arguments
+///
+/// * `block_count` - The number of blocks to get the fee history for.
+/// * `newest_block` - The newest block to get the fee history for.
+/// * `reward_percentiles` - The reward percentiles to get the fee history for.
+/// * `rpc_services` - The RPC services used to interact with the EVM.
+/// * `evm_rpc` - The EVM RPC canister.
+///
+/// # Returns
+///
+/// The fee history.
 pub async fn fee_history(
     block_count: Nat,
     newest_block: BlockTag,
     reward_percentiles: Option<Vec<u8>>,
     rpc_services: RpcServices,
     evm_rpc: &Service,
-) -> Result<FeeHistory, RouterError> {
+) -> FeeHistory {
     let fee_history_args: FeeHistoryArgs = FeeHistoryArgs {
         blockCount: block_count,
         newestBlock: newest_block,
@@ -40,17 +49,34 @@ pub async fn fee_history(
     {
         Ok((res,)) => match res {
             MultiFeeHistoryResult::Consistent(fee_history) => match fee_history {
-                FeeHistoryResult::Ok(fee_history) => fee_history.ok_or_else(|| RouterError::NonExistentValue),
-                FeeHistoryResult::Err(e) => Err(RouterError::RpcResponseError(e)),
+                FeeHistoryResult::Ok(fee_history) => fee_history.unwrap(),
+                FeeHistoryResult::Err(e) => {
+                    ic_cdk::trap(format!("Error: {:?}", e).as_str());
+                }
             },
-            MultiFeeHistoryResult::Inconsistent(_) => Err(RouterError::Unknown(
-                "Fee history is inconsistent".to_string(),
-            )),
+            MultiFeeHistoryResult::Inconsistent(_) => {
+                ic_cdk::trap("Fee history is inconsistent");
+            }
         },
-        Err(e) => Err(RouterError::Unknown(e.1)),
+        Err(e) => ic_cdk::trap(format!("Error: {:?}", e).as_str()),
     }
 }
 
+/// Represents the fee estimates.
+pub struct FeeEstimates {
+    pub max_fee_per_gas: U256,
+    pub max_priority_fee_per_gas: U256,
+}
+
+/// Gets the median index.
+///
+/// # Arguments
+///
+/// * `length` - The length of the array.
+///
+/// # Returns
+///
+/// The median index.
 fn median_index(length: usize) -> usize {
     if length == 0 {
         panic!("Cannot find a median index for an array of length zero.");
@@ -58,11 +84,24 @@ fn median_index(length: usize) -> usize {
     (length - 1) / 2
 }
 
+/// Estimates the transaction fees.
+///
+/// # Arguments
+///
+/// * `block_count` - The number of historical blocks to base the fee estimates on.
+/// * `rpc_services` - The RPC services used to interact with the EVM.
+/// * `evm_rpc` - The EVM RPC canister.
 pub async fn estimate_transaction_fees(
     block_count: u8,
     rpc_services: RpcServices,
     evm_rpc: &Service,
-) -> Result<FeeEstimates, RouterError> {
+) -> FeeEstimates {
+    // we are setting the `max_priority_fee_per_gas` based on this article:
+    // https://docs.alchemy.com/docs/maxpriorityfeepergas-vs-maxfeepergas
+    // following this logic, the base fee will be derived from the block history automatically
+    // and we only specify the maximum priority fee per gas (tip).
+    // the tip is derived from the fee history of the last 9 blocks, more specifically
+    // from the 95th percentile of the tip.
     let fee_history = fee_history(
         Nat::from(block_count),
         BlockTag::Latest,
@@ -70,12 +109,12 @@ pub async fn estimate_transaction_fees(
         rpc_services,
         evm_rpc,
     )
-    .await?;
+    .await;
 
     let median_index = median_index(block_count.into());
 
     // baseFeePerGas
-    let base_fee_per_gas = fee_history.baseFeePerGas.last().ok_or_else(|| RouterError::NonExistentValue)?.clone();
+    let base_fee_per_gas = fee_history.baseFeePerGas.last().unwrap().clone();
 
     // obtain the 95th percentile of the tips for the past 9 blocks
     let mut percentile_95: Vec<Nat> = fee_history
@@ -97,13 +136,8 @@ pub async fn estimate_transaction_fees(
         .add(base_fee_per_gas)
         .max(Nat::from(MIN_SUGGEST_MAX_PRIORITY_FEE_PER_GAS));
 
-    Ok(FeeEstimates {
-        max_fee_per_gas: nat_to_u256(&max_priority_fee_per_gas)?,
-        max_priority_fee_per_gas: nat_to_u256(&median_reward)?,
-    })
-}
-
-pub fn nat_to_u256(n: &Nat) -> Result<U256, RouterError> {
-    let string_value = n.to_string();
-    U256::from_str(&string_value).map_err(|err| RouterError::Unknown(format!("{:#?}", err)))
+    FeeEstimates {
+        max_fee_per_gas: nat_to_u256(&max_priority_fee_per_gas),
+        max_priority_fee_per_gas: nat_to_u256(&median_reward),
+    }
 }

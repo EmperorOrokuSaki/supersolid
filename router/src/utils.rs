@@ -3,6 +3,7 @@ use std::str::FromStr;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use alloy_sol_types::SolCall;
 use candid::Principal;
+use ethers_core::types::{Eip1559TransactionRequest, H160};
 use ic_exports::ic_cdk::{
     self,
     api::{
@@ -16,7 +17,11 @@ use serde_json::json;
 use crate::{
     evm_rpc::{
         MultiSendRawTransactionResult, RequestResult, RpcApi, RpcService, RpcServices, Service,
-    }, gas::{estimate_transaction_fees, FeeEstimates}, signer::{sign_eip1559_transaction, SignRequest}, types::{DerivationPath, EthCallResponse, RouterError}
+    },
+    gas::{estimate_transaction_fees, FeeEstimates},
+    signer::sign_eip1559_transaction,
+    state::ROUTER_PUBLIC_KEY,
+    types::{DerivationPath, EthCallResponse, RouterError},
 };
 
 pub fn rpc_provider(rpc_url: &str) -> RpcService {
@@ -59,16 +64,17 @@ pub fn decode_response(
 }
 
 pub async fn send_raw_transaction(
+    chain_id: u64,
     to: String,
     data: Vec<u8>,
-    value: U256,
+    value: u128,
     nonce: u64,
     derivation_path: DerivationPath,
     rpc_canister: &Service,
     rpc_url: &str,
     cycles: u128,
 ) -> Result<MultiSendRawTransactionResult, RouterError> {
-    let input = Bytes::from(data);
+    let input = ethers_core::types::Bytes::from(data);
     let rpc = RpcServices::Custom {
         chainId: 1,
         services: vec![RpcApi {
@@ -76,29 +82,35 @@ pub async fn send_raw_transaction(
             headers: None,
         }],
     };
+    print("*/*/*/*/*/ Starting to send fee estimates.");
 
     let FeeEstimates {
         max_fee_per_gas,
         max_priority_fee_per_gas,
-    } = estimate_transaction_fees(9, rpc.clone(), rpc_canister).await?;
+    } = estimate_transaction_fees(9, rpc.clone(), rpc_canister).await;
 
     let key_id = EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
         name: String::from("key_1"),
     };
 
-    let request = SignRequest {
-        chain_id: 1,
-        from: None,
-        to: TxKind::Call(
-            Address::from_str(&to)
-                .map_err(|err| RouterError::DecodingError(format!("{:#?}", err)))?,
+    let public_key = ROUTER_PUBLIC_KEY.with(|pk| pk.borrow().clone());
+
+    let request = Eip1559TransactionRequest {
+        from: Default::default(),
+        to: Some(
+            ethers_core::types::Address::from_str(&to)
+                .expect("should be a valid address")
+                .into(),
         ),
-        max_fee_per_gas: max_fee_per_gas.to::<u128>(),
-        max_priority_fee_per_gas: max_priority_fee_per_gas.to::<u128>(),
-        value,
-        nonce,
-        data: input,
+        gas: Some(ethers_core::types::U256::from(140000)),
+        value: Some(ethers_core::types::U256::from(value)),
+        data: Some(input),
+        nonce: Some(ethers_core::types::U256::from(nonce)),
+        access_list: Default::default(),
+        max_priority_fee_per_gas: Some(max_priority_fee_per_gas * 105 / 100),
+        max_fee_per_gas: Some(max_fee_per_gas * 105 / 100),
+        chain_id: Some(ethers_core::types::U64::from(chain_id)),
     };
 
     let signed_transaction = sign_eip1559_transaction(request, key_id, derivation_path).await;
@@ -111,7 +123,6 @@ pub async fn send_raw_transaction(
         Err(e) => Err(RouterError::Unknown(e.1)),
     }
 }
-
 
 // pub fn handle_rpc_response<T, F: SolCall<Return = T>>(
 //     rpc_response: RequestResult,
