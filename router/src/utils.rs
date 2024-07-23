@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use alloy_sol_types::SolCall;
-use candid::Principal;
+use candid::{Nat, Principal};
 use ethers_core::types::{Eip1559TransactionRequest, H160};
 use ic_exports::ic_cdk::{
     self,
@@ -71,6 +71,7 @@ pub async fn send_raw_transaction(
     nonce: u64,
     derivation_path: DerivationPath,
     rpc_canister: &Service,
+    block_number: Nat,
     rpc_url: &str,
     cycles: u128,
 ) -> Result<MultiSendRawTransactionResult, RouterError> {
@@ -87,7 +88,7 @@ pub async fn send_raw_transaction(
     let FeeEstimates {
         max_fee_per_gas,
         max_priority_fee_per_gas,
-    } = estimate_transaction_fees(9, rpc.clone(), rpc_canister).await;
+    } = estimate_transaction_fees(9, rpc.clone(), rpc_canister, block_number).await;
 
     let key_id = EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,

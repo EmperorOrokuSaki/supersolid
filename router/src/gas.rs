@@ -95,6 +95,7 @@ pub async fn estimate_transaction_fees(
     block_count: u8,
     rpc_services: RpcServices,
     evm_rpc: &Service,
+    block_number: Nat
 ) -> FeeEstimates {
     // we are setting the `max_priority_fee_per_gas` based on this article:
     // https://docs.alchemy.com/docs/maxpriorityfeepergas-vs-maxfeepergas
@@ -104,7 +105,7 @@ pub async fn estimate_transaction_fees(
     // from the 95th percentile of the tip.
     let fee_history = fee_history(
         Nat::from(block_count),
-        BlockTag::Latest,
+        BlockTag::Number(block_number),
         Some(vec![95]),
         rpc_services,
         evm_rpc,

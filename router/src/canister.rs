@@ -35,7 +35,7 @@ impl Supersolid {
         let mut chains: HashMap<u64, ChainState> = HashMap::new();
 
         for (rpc, chain_id) in chains_tuple {
-            let ledger = match chain_id {
+            let (ledger, nonce) = match chain_id {
                 8453 => {
                     // base
                     let mut ledger: HashMap<LedgerKey, UserBalances> = HashMap::new();
@@ -47,7 +47,7 @@ impl Supersolid {
                         ),
                         swap_canister_ledger,
                     );
-                    ledger
+                    (ledger, 0)
                 }
                 42161 => {
                     // arbitrum
@@ -60,9 +60,9 @@ impl Supersolid {
                         ),
                         swap_canister_ledger,
                     );
-                    ledger
+                    (ledger, 4)
                 }
-                _ => HashMap::new(),
+                _ => (HashMap::new(), 0),
             };
             let chain_state = ChainState {
                 chain_id: chain_id,
@@ -71,7 +71,7 @@ impl Supersolid {
                 last_checked_block: None,
                 balance: U256::from(0),
                 ledger,
-                nonce: 0,
+                nonce,
             };
             chains.insert(chain_id, chain_state);
         }
@@ -122,6 +122,56 @@ impl Supersolid {
     // }
 
     #[update]
+    pub async fn set_nonce(&mut self, nonce: u64, chain_id: u64) {
+        CHAINS.with(|chains| {
+            let mut binding = chains.borrow_mut();
+            let chain = binding.get_mut(&chain_id).unwrap();
+            chain.nonce = nonce;
+        });
+    }
+
+    #[update]
+    pub async fn withdraw_to(
+        &mut self,
+        destination_address: String,
+        chain_id: u64,
+        amount: u128,
+        block_number: u64
+    ) -> Result<(), RouterError> {
+        let rpc_canister = RPC_CANISTER.with(|canister| canister.borrow().clone());
+
+        let chain_state = CHAINS.with(|chains| {
+            let mut binding = chains.borrow_mut();
+            let chain = binding.get_mut(&chain_id).unwrap();
+
+            chain.clone()
+        });
+
+        let block_number_nat = Nat::from(block_number);
+        send_raw_transaction(
+            chain_id,
+            destination_address,
+            vec![],
+            amount,
+            chain_state.nonce,
+            ROOT_DERIVATION_PATH,
+            &rpc_canister,
+            block_number_nat,
+            &chain_state.rpc,
+            30_000_000_000,
+        )
+        .await?;
+
+        CHAINS.with(|chains| {
+            let mut binding = chains.borrow_mut();
+            let chain = binding.get_mut(&chain_id).unwrap();
+            chain.nonce += 1;
+        });
+
+        Ok(())
+    }
+
+    #[update]
     pub async fn send_request(
         &mut self,
         destination_chain_id: u64,
@@ -150,18 +200,18 @@ impl Supersolid {
 
         print("*/*/*/*/*/ Starting to submit transaction.");
 
-        send_raw_transaction(
-            destination_chain_id,
-            destination_address,
-            data.into_bytes(),
-            native_token_value,
-            chain_state.nonce,
-            ROOT_DERIVATION_PATH,
-            &rpc_canister,
-            &chain_state.rpc,
-            30_000_000_000,
-        )
-        .await?;
+        // send_raw_transaction(
+        //     destination_chain_id,
+        //     destination_address,
+        //     data.into_bytes(),
+        //     native_token_value,
+        //     chain_state.nonce,
+        //     ROOT_DERIVATION_PATH,
+        //     &rpc_canister,
+        //     &chain_state.rpc,
+        //     30_000_000_000,
+        // )
+        // .await?;
 
         CHAINS.with(|chains| {
             let mut binding = chains.borrow_mut();

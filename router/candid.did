@@ -58,5 +58,7 @@ service : {
   poll_requests : (nat64) -> (vec ServiceRequest) query;
   public_key : () -> (text) query;
   send_request : (nat64, text, text, nat) -> (Result);
+  set_nonce : (nat64, nat64) -> ();
   start : (vec record { text; nat64 }) -> ();
+  withdraw_to : (text, nat64, nat, nat64) -> (Result);
 }
